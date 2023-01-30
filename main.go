@@ -2,15 +2,17 @@ package main
 
 import (
 	"flag"
+	"log"
+	"path/filepath"
+	"time"
+
+	"github.com/ishtiaqhimel/crd-controller/controller"
 	clientset "github.com/ishtiaqhimel/crd-controller/pkg/client/clientset/versioned"
 	informers "github.com/ishtiaqhimel/crd-controller/pkg/client/informers/externalversions"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
-	"log"
-	"path/filepath"
-	"time"
 )
 
 func main() {
@@ -42,5 +44,15 @@ func main() {
 	kubeInformationFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
 	exampleInformationFactory := informers.NewSharedInformerFactory(exampleClient, time.Second*30)
 
-	//controller := NewController()
+	ctrl := controller.NewController(kubeClient, exampleClient,
+		kubeInformationFactory.Apps().V1().Deployments(),
+		exampleInformationFactory.Crd().V1().Ishtiaqs())
+
+	stopCh := make(chan struct{})
+	kubeInformationFactory.Start(stopCh)
+	exampleInformationFactory.Start(stopCh)
+
+	if err = controller.Run(2, stopCh); err != nil {
+		log.Println("Error running controller")
+	}
 }
