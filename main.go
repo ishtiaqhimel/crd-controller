@@ -52,7 +52,7 @@ func main() {
 	kubeInformationFactory.Start(stopCh)
 	exampleInformationFactory.Start(stopCh)
 
-	if err = controller.Run(2, stopCh); err != nil {
+	if err = ctrl.Run(2, stopCh); err != nil {
 		log.Println("Error running controller")
 	}
 }

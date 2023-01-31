@@ -1,0 +1,10 @@
+apiVersion: crd.com/v1
+kind: Ishtiaq
+metadata:
+  name: example-ishtiaq
+spec:
+  name: ishtiaq
+  replicas: 3
+  container:
+    image: ishtiaq99/go-api-server
+    port: 3000
