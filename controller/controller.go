@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"log"
 	"time"
 
@@ -83,9 +84,8 @@ func NewController(
 // string which is then put onto the work queue. This method should *not* be
 // passed resources of any type other than Ishtiaq.
 func (c *Controller) enqueueIshtiaq(obj interface{}) {
-	log.Println("Enqueueing Ishtiaq... + obj:", obj)
+	log.Println("Enqueueing Ishtiaq...")
 	key, err := cache.MetaNamespaceKeyFunc(obj)
-	log.Println("Key (namespace/name):", key)
 	if err != nil {
 		utilruntime.HandleError(err)
 		return
@@ -95,7 +95,7 @@ func (c *Controller) enqueueIshtiaq(obj interface{}) {
 
 // Run will set up the event handlers for types we are interested in, as well
 // as syncing informer caches and starting workers. It will block until stopCh
-// is closed, at which point it will shutdown the workqueue and wait for
+// is closed, at which point it will shut down the workqueue and wait for
 // workers to finish processing their current work items.
 func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
@@ -126,8 +126,7 @@ func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 }
 
 // runWorker is a long-running function that will continually call the
-// processNextWorkItem function in order to read and process a message on the
-// workqueue.
+// processNextWorkItem function in order to read and process a message on the workqueue.
 func (c *Controller) runWorker() {
 	for c.ProcessNextItem() {
 	}
@@ -140,22 +139,20 @@ func (c *Controller) ProcessNextItem() bool {
 		return false
 	}
 
-	// We wrap this block in a func so we can defer c.workqueue.Done.
+	// We wrap this block in a func, so we can defer c.workqueue.Done.
 	err := func(obj interface{}) error {
 		// We call Done here so the workqueue knows we have finished
 		// processing this item. We also must remember to call Forget if we
 		// do not want this work item being re-queued. For example, we do
 		// not call Forget if a transient error occurs, instead the item is
-		// put back on the workqueue and attempted again after a back-off
-		// period.
+		// put back on the workqueue and attempted again after a back-off period.
 		defer c.workQueue.Done(obj)
 		var key string
 		var ok bool
 		// We expect strings to come off the workqueue. These are of the
 		// form namespace/name. We do this as the delayed nature of the
 		// workqueue means the items in the informer cache may actually be
-		// more up to date that when the item was initially put onto the
-		// workqueue.
+		// more up to date that when the item was initially put onto the workqueue.
 		if key, ok = obj.(string); !ok {
 			// As the item in the workqueue is actually invalid, we call
 			// Forget here else we'd go into a loop of attempting to
@@ -166,14 +163,14 @@ func (c *Controller) ProcessNextItem() bool {
 		}
 
 		// Run the syncHandler, passing it the namespace/name string of the
-		// Foo resource to be synced.
+		// Ishtiaq resource to be synced.
 		if err := c.syncHandler(key); err != nil {
 			// Put the item back on the workqueue to handle any transient errors.
 			c.workQueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 
-		// Finally, if no error occurs we Forget this item so it does not
+		// Finally, if no error occurs we Forget this item, so it does not
 		// get queued again until another change happens.
 		c.workQueue.Forget(obj)
 		log.Printf("successfully synced '%s'\n", key)
@@ -190,6 +187,7 @@ func (c *Controller) ProcessNextItem() bool {
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Ishtiaq resource
 // with the current status of the resource.
+// implement the business logic here.
 func (c *Controller) syncHandler(key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
@@ -201,8 +199,7 @@ func (c *Controller) syncHandler(key string) error {
 	// Get the Ishtiaq resource with this namespace/name
 	ishtiaq, err := c.ishtiaqLister.Ishtiaqs(namespace).Get(name)
 	if err != nil {
-		// The Ishtiaq resource may no longer exist, in which case we stop
-		// processing.
+		// The Ishtiaq resource may no longer exist, in which case we stop processing.
 		if errors.IsNotFound(err) {
 			// We choose to absorb the error here as the worker would requeue the
 			// resource otherwise. Instead, the next time the resource is updated
@@ -228,7 +225,7 @@ func (c *Controller) syncHandler(key string) error {
 	if errors.IsNotFound(err) {
 		deployment, err = c.kubeclientset.AppsV1().Deployments(ishtiaq.Namespace).Create(context.TODO(), newDeployment(ishtiaq), metav1.CreateOptions{})
 	}
-	// If an error occurs during Get/Create, we'll requeue the item so we can
+	// If an error occurs during Get/Create, we'll requeue the item, so we can
 	// attempt processing again later. This could have been caused by a
 	// temporary network failure, or any other transient reason.
 	if err != nil {
@@ -242,7 +239,7 @@ func (c *Controller) syncHandler(key string) error {
 		log.Printf("Ishtiaq %s replicas: %d, deployment replicas: %d\n", name, *ishtiaq.Spec.Replicas, *deployment.Spec.Replicas)
 
 		deployment, err = c.kubeclientset.AppsV1().Deployments(namespace).Update(context.TODO(), newDeployment(ishtiaq), metav1.UpdateOptions{})
-		// If an error occurs during Update, we'll requeue the item so we can
+		// If an error occurs during Update, we'll requeue the item, so we can
 		// attempt processing again later. This could have been caused by a
 		// temporary network failure, or any other transient reason.
 		if err != nil {
@@ -254,6 +251,28 @@ func (c *Controller) syncHandler(key string) error {
 	// current state of the world
 	err = c.updateIshtiaqStatus(ishtiaq, deployment)
 	if err != nil {
+		return err
+	}
+
+	serviceName := ishtiaq.Spec.Name + "-service"
+
+	// Check if service already exists or not
+	service, err := c.kubeclientset.CoreV1().Services(ishtiaq.Namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		service, err = c.kubeclientset.CoreV1().Services(ishtiaq.Namespace).Create(context.TODO(), newService(ishtiaq), metav1.CreateOptions{})
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		log.Printf("\nservice %s created .....\n", service.Name)
+	} else if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	_, err = c.kubeclientset.CoreV1().Services(ishtiaq.Namespace).Update(context.TODO(), service, metav1.UpdateOptions{})
+	if err != nil {
+		log.Println(err)
 		return err
 	}
 
@@ -305,12 +324,12 @@ func newDeployment(ishtiaq *controllerv1.Ishtiaq) *appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:  "my-app",
-							Image: "ishtiaq99/go-api-server",
+							Image: ishtiaq.Spec.Container.Image,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",
 									Protocol:      corev1.ProtocolTCP,
-									ContainerPort: 3000,
+									ContainerPort: ishtiaq.Spec.Container.Port,
 								},
 							},
 						},
@@ -319,4 +338,33 @@ func newDeployment(ishtiaq *controllerv1.Ishtiaq) *appsv1.Deployment {
 			},
 		},
 	}
+}
+
+func newService(ishtiaq *controllerv1.Ishtiaq) *corev1.Service {
+	labels := map[string]string{
+		"app": "my-app",
+	}
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ishtiaq.Spec.Name + "-service",
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(ishtiaq, controllerv1.SchemeGroupVersion.WithKind("Ishtiaq")),
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeNodePort,
+			Selector: labels,
+			Ports: []corev1.ServicePort{
+				{
+					Port:       ishtiaq.Spec.Container.Port,
+					TargetPort: intstr.FromInt(int(ishtiaq.Spec.Container.Port)),
+					NodePort:   30007,
+				},
+			},
+		},
+	}
+
 }

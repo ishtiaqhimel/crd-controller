@@ -4,7 +4,7 @@ metadata:
   name: example-ishtiaq
 spec:
   name: ishtiaq
-  replicas: 3
+  replicas: 2
   container:
     image: ishtiaq99/go-api-server
     port: 3000

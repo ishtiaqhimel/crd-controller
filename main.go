@@ -41,13 +41,22 @@ func main() {
 		panic(err)
 	}
 
+	// Initialise the informer resource and here we will be using sharedinformer factory instead of simple informers
+	// because in case if we need to query / watch multiple Group versions, and it’s a good practise as well
+	// NewSharedInformerFactory will create a new ShareInformerFactory for "all namespaces"
+	// 30*time.Second is the re-sync period to update the in-memory cache of informer //
 	kubeInformationFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
 	exampleInformationFactory := informers.NewSharedInformerFactory(exampleClient, time.Second*30)
+
+	// From this informerfactory we can create specific informers for every group version resource
+	// that are default available in k8s environment such as Pods, deployment, etc
+	// podInformer := kubeInformationFactory.Core().V1().Pods()
 
 	ctrl := controller.NewController(kubeClient, exampleClient,
 		kubeInformationFactory.Apps().V1().Deployments(),
 		exampleInformationFactory.Crd().V1().Ishtiaqs())
 
+	// creating a unbuffered channel to synchronize the update
 	stopCh := make(chan struct{})
 	kubeInformationFactory.Start(stopCh)
 	exampleInformationFactory.Start(stopCh)
